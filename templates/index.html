@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bangla Reading Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans Bengali', sans-serif;
+        }
+        .word-span {
+            cursor: pointer;
+            transition: all 0.15s ease;
+            border-radius: 2px;
+            padding: 0 2px;
+        }
+        .word-span:hover {
+            background-color: rgba(59, 130, 246, 0.2);
+        }
+        .word-rare {
+            border-bottom: 1px dotted rgba(156, 163, 175, 0.6);
+        }
+        .word-ignored {
+            opacity: 0.4;
+        }
+        .word-added {
+            position: relative;
+        }
+        .word-added::after {
+            content: '\2713';
+            position: absolute;
+            top: -8px;
+            right: -6px;
+            font-size: 10px;
+            color: #22c55e;
+        }
+        .popup-enter {
+            animation: popupEnter 0.15s ease-out;
+        }
+        @keyframes popupEnter {
+            from {
+                opacity: 0;
+                transform: scale(0.95) translateY(-5px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+        .slide-in {
+            animation: slideIn 0.2s ease-out;
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+            }
+            to {
+                transform: translateX(0);
+            }
+        }
+        .toast {
+            animation: toastIn 0.3s ease-out, toastOut 0.3s ease-in 2.7s forwards;
+        }
+        @keyframes toastIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        @keyframes toastOut {
+            from {
+                opacity: 1;
+                transform: translateY(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+        }
+        .loading-spinner {
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    <!-- Settings Button (Top Right) -->
+    <button id="settings-btn" class="fixed top-4 right-4 z-40 p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+        </svg>
+    </button>
+
+    <!-- Landing View -->
+    <div id="landing-view" class="flex flex-col items-center justify-center min-h-screen p-8">
+        <h1 class="text-4xl font-bold mb-2 text-blue-400">Bangla Reading Assistant</h1>
+        <p class="text-gray-400 mb-8">Paste a Bangla article below to start reading with vocabulary assistance</p>
+
+        <textarea
+            id="article-input"
+            class="w-full max-w-3xl h-64 p-4 bg-gray-800 border border-gray-700 rounded-lg text-lg leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-500"
+            placeholder="এখানে বাংলা প্রবন্ধ পেস্ট করুন..."
+        ></textarea>
+
+        <button
+            id="read-btn"
+            class="mt-6 px-8 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold text-lg transition-colors flex items-center gap-2"
+        >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+            </svg>
+            Read Article
+        </button>
+    </div>
+
+    <!-- Reader View -->
+    <div id="reader-view" class="hidden min-h-screen">
+        <!-- Back Button -->
+        <div class="fixed top-4 left-4 z-40">
+            <button id="back-btn" class="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                </svg>
+                Back
+            </button>
+        </div>
+
+        <!-- Article Content -->
+        <div id="article-content" class="max-w-4xl mx-auto px-8 py-20 text-xl leading-[1.8]">
+            <!-- Article will be rendered here -->
+        </div>
+    </div>
+
+    <!-- Word Popup -->
+    <div id="word-popup" class="hidden fixed z-50 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl p-4 w-80 popup-enter">
+        <div class="flex items-start justify-between mb-3">
+            <div>
+                <span id="popup-word" class="text-2xl font-semibold text-blue-400"></span>
+                <span id="popup-zipf-badge" class="ml-2 px-2 py-0.5 text-xs rounded-full"></span>
+            </div>
+            <button id="popup-close" class="text-gray-500 hover:text-gray-300">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+
+        <div id="popup-translation" class="text-gray-300 mb-4 min-h-[24px]">
+            <div id="translation-loading" class="hidden flex items-center gap-2 text-gray-500">
+                <div class="loading-spinner"></div>
+                <span>Loading translation...</span>
+            </div>
+            <span id="translation-text"></span>
+        </div>
+
+        <div class="flex gap-2">
+            <button id="popup-add" class="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition-colors text-sm">
+                Add to Anki
+            </button>
+            <button id="popup-ignore" class="flex-1 px-3 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg font-medium transition-colors text-sm">
+                Ignore
+            </button>
+            <button id="popup-skip" class="px-3 py-2 border border-gray-600 hover:bg-gray-700 rounded-lg font-medium transition-colors text-sm">
+                Skip
+            </button>
+        </div>
+    </div>
+
+    <!-- Queue Panel -->
+    <div id="queue-panel" class="hidden fixed top-0 right-0 h-full w-80 bg-gray-800 border-l border-gray-700 z-50 slide-in overflow-hidden flex flex-col">
+        <div class="p-4 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-lg font-semibold">Card Queue</h2>
+            <button id="queue-close" class="text-gray-500 hover:text-gray-300">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+
+        <div id="queue-list" class="flex-1 overflow-y-auto p-4 space-y-2">
+            <!-- Queue items will be rendered here -->
+        </div>
+
+        <div class="p-4 border-t border-gray-700 space-y-2">
+            <button id="export-apkg" class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                </svg>
+                Download .apkg
+            </button>
+            <button id="export-anki" class="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg font-medium transition-colors flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                </svg>
+                Push to Anki
+            </button>
+        </div>
+    </div>
+
+    <!-- Queue Toggle Button -->
+    <button id="queue-toggle" class="fixed bottom-6 right-6 z-40 px-4 py-3 bg-blue-600 hover:bg-blue-700 rounded-full shadow-lg transition-all flex items-center gap-2">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+        </svg>
+        <span id="queue-count">0</span>
+    </button>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center">
+        <div class="absolute inset-0 bg-black/60" id="settings-overlay"></div>
+        <div class="relative bg-gray-800 border border-gray-700 rounded-xl shadow-2xl p-6 w-full max-w-md mx-4">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-xl font-semibold">Settings</h2>
+                <button id="settings-close" class="text-gray-500 hover:text-gray-300">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-1">Gemini API Key</label>
+                    <input
+                        type="password"
+                        id="settings-api-key"
+                        class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Enter your Gemini API key"
+                    >
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-1">AnkiConnect URL</label>
+                    <input
+                        type="text"
+                        id="settings-anki-url"
+                        class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="http://localhost:8765"
+                    >
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-1">Target Deck Name</label>
+                    <input
+                        type="text"
+                        id="settings-deck-name"
+                        class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Bangla Vocab"
+                    >
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-1">
+                        Zipf Threshold: <span id="zipf-value">3.0</span>
+                    </label>
+                    <input
+                        type="range"
+                        id="settings-zipf-threshold"
+                        min="1.0"
+                        max="5.0"
+                        step="0.1"
+                        value="3.0"
+                        class="w-full accent-blue-500"
+                    >
+                    <div class="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>1.0 (Rare)</span>
+                        <span>5.0 (Common)</span>
+                    </div>
+                </div>
+
+                <div class="pt-4 border-t border-gray-700 space-y-2">
+                    <button id="clear-ignored" class="w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors text-sm">
+                        Clear Ignored Words
+                    </button>
+                    <button id="clear-cache" class="w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors text-sm">
+                        Clear Cache
+                    </button>
+                </div>
+
+                <button id="settings-save" class="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold transition-colors mt-4">
+                    Save Settings
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 space-y-2">
+        <!-- Toasts will be rendered here -->
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
