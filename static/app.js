@@ -424,11 +424,18 @@ function showPopup(x, y, word, zipf) {
     popup.style.left = `${Math.max(10, left)}px`;
     popup.style.top = `${Math.max(10, top)}px`;
 
-    // Fetch translation
-    loadTranslation(word);
+    // Fetch translation (skips API for very common words)
+    loadTranslation(word, zipf);
 }
 
-async function loadTranslation(word) {
+async function loadTranslation(word, zipf) {
+    // Skip API call for very common words (zipf > 5.5) - user likely knows these
+    if (zipf !== null && zipf > 5.5) {
+        elements.translationLoading.classList.add('hidden');
+        elements.translationText.textContent = '(common word - click Add for full details)';
+        return;
+    }
+
     try {
         const translation = await translateWord(word);
         elements.translationLoading.classList.add('hidden');
@@ -586,9 +593,16 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+// Debounce helper
+let addDebounceTimer = null;
+
 // Add to Anki
 elements.popupAdd.addEventListener('click', async () => {
     if (!currentSelection.word) return;
+
+    // Debounce rapid clicks
+    if (addDebounceTimer) return;
+    addDebounceTimer = setTimeout(() => { addDebounceTimer = null; }, 1000);
 
     elements.popupAdd.disabled = true;
     elements.popupAdd.innerHTML = '<div class="loading-spinner mx-auto"></div>';
@@ -599,9 +613,13 @@ elements.popupAdd.addEventListener('click', async () => {
         const zipf = currentSelection.zipf || 0;
 
         const enrichment = await enrichWord(currentSelection.word, sentence, zipf);
+
+        // Use enrichment translation (saves a separate translate call if not cached)
+        const translation = enrichment.translation || elements.translationText.textContent;
+
         const card = {
             word: currentSelection.word,
-            translation: elements.translationText.textContent,
+            translation: translation,
             ...enrichment
         };
 
