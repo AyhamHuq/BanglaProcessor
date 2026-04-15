@@ -129,6 +129,7 @@ const elements = {
     translationLoading: document.getElementById('translation-loading'),
     translationText: document.getElementById('translation-text'),
     popupClose: document.getElementById('popup-close'),
+    popupTts: document.getElementById('popup-tts'),
     popupAdd: document.getElementById('popup-add'),
     popupIgnore: document.getElementById('popup-ignore'),
     popupSkip: document.getElementById('popup-skip'),
@@ -449,18 +450,14 @@ function showPopup(x, y, word, zipf) {
     popup.style.left = `${Math.max(10, left)}px`;
     popup.style.top = `${Math.max(10, top)}px`;
 
-    // Fetch translation (skips API for very common words)
+    // Fetch translation
     loadTranslation(word, zipf);
+
+    // Auto-play pronunciation
+    speakBangla(word);
 }
 
 async function loadTranslation(word, zipf) {
-    // Skip API call for very common words (zipf > 5.5) - user likely knows these
-    if (zipf !== null && zipf > 5.5) {
-        elements.translationLoading.classList.add('hidden');
-        elements.translationText.textContent = '(common word - click Add for full details)';
-        return;
-    }
-
     try {
         const translation = await translateWord(word);
         elements.translationLoading.classList.add('hidden');
@@ -556,13 +553,12 @@ elements.readBtn.addEventListener('click', async () => {
         renderArticle(result.html);
         showView('reader');
 
-        // Batch-translate all rare words in the background
-        const rareWords = result.tokens
-            .filter(t => t.is_rare)
+        // Batch-translate ALL unique words in the background
+        const allWords = result.tokens
             .map(t => t.word)
             .filter((w, i, arr) => arr.indexOf(w) === i);  // dedupe
-        if (rareWords.length > 0) {
-            batchTranslateWords(rareWords);  // fire and forget
+        if (allWords.length > 0) {
+            batchTranslateWords(allWords);  // fire and forget
         }
     } catch (error) {
         showToast(error.message || 'Failed to process article', 'error');
@@ -614,6 +610,29 @@ elements.articleContent.addEventListener('mouseup', (e) => {
 // Popup close
 elements.popupClose.addEventListener('click', hidePopup);
 elements.popupSkip.addEventListener('click', hidePopup);
+
+// TTS - uses browser SpeechSynthesis (no API call)
+function speakBangla(text) {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'bn-BD';
+    utterance.rate = 0.9;
+
+    // Try to find a Bengali voice
+    const voices = window.speechSynthesis.getVoices();
+    const bnVoice = voices.find(v => v.lang.startsWith('bn'));
+    if (bnVoice) utterance.voice = bnVoice;
+
+    window.speechSynthesis.speak(utterance);
+}
+
+elements.popupTts.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (currentSelection.word) {
+        speakBangla(currentSelection.word);
+    }
+});
 
 // Click outside popup to close
 document.addEventListener('click', (e) => {

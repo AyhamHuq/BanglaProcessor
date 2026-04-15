@@ -83,9 +83,12 @@ def translate_batch(words: list[str], api_key: str = None) -> dict:
     if not uncached:
         return results
 
-    # Batch up to 30 words per API call
-    for i in range(0, len(uncached), 30):
-        batch = uncached[i:i+30]
+    # Batch up to 50 words per API call for efficiency
+    for i in range(0, len(uncached), 50):
+        if i > 0:
+            time.sleep(4)  # Respect free tier rate limits between batches
+
+        batch = uncached[i:i+50]
         word_list = "\n".join(f"{j+1}. {w}" for j, w in enumerate(batch))
         prompt = f"Translate each Bangla word to concise English (1-3 words). Reply with ONLY numbered translations, one per line.\n{word_list}"
 
@@ -101,8 +104,25 @@ def translate_batch(words: list[str], api_key: str = None) -> dict:
                 else:
                     results[word] = ""
         except Exception as e:
-            for word in batch:
-                results[word] = ""
+            # On rate limit, wait and retry once
+            if "429" in str(e) or "quota" in str(e).lower():
+                time.sleep(8)
+                try:
+                    result = _call_gemini(prompt, api_key)
+                    lines = [l.strip() for l in result.strip().split("\n") if l.strip()]
+                    for j, word in enumerate(batch):
+                        if j < len(lines):
+                            translation = lines[j].lstrip("0123456789.-) ").strip()
+                            results[word] = translation
+                            cache[_get_cache_key(word)] = translation
+                        else:
+                            results[word] = ""
+                except:
+                    for word in batch:
+                        results[word] = ""
+            else:
+                for word in batch:
+                    results[word] = ""
 
     _save_cache(TRANSLATION_CACHE_FILE, cache)
     return results
