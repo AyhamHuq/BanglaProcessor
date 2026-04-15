@@ -5,7 +5,6 @@ import hashlib
 from pathlib import Path
 import httpx
 from dotenv import load_dotenv
-from fallback_dict import get_fallback_translation
 
 load_dotenv()
 
@@ -67,20 +66,14 @@ def translate_word(text: str, api_key: str = None) -> str:
     if not api_key:
         api_key = os.getenv("GEMINI_API_KEY")
 
+    if not api_key:
+        return {"error": "No API key provided"}
+
     # Check server-side cache first
     cache = _load_cache(TRANSLATION_CACHE_FILE)
     cache_key = _get_cache_key(text)
     if cache_key in cache:
         return cache[cache_key]
-
-    # Check fallback dictionary
-    fallback = get_fallback_translation(text)
-
-    # If no API key, use fallback or return error
-    if not api_key:
-        if fallback:
-            return fallback
-        return {"error": "No API key provided"}
 
     # Shorter prompt = fewer tokens
     prompt = f"Bangla to English (1-3 words only): {text}"
@@ -92,12 +85,6 @@ def translate_word(text: str, api_key: str = None) -> str:
         _save_cache(TRANSLATION_CACHE_FILE, cache)
         return result
     except Exception as e:
-        # On API failure, try fallback dictionary
-        if fallback:
-            # Cache the fallback result too
-            cache[cache_key] = fallback
-            _save_cache(TRANSLATION_CACHE_FILE, cache)
-            return fallback
         return {"error": str(e)}
 
 
@@ -144,32 +131,17 @@ def enrich_word(text: str, sentence: str, zipf: float, api_key: str = None) -> d
 
         return parsed
     except json.JSONDecodeError:
-        fallback = get_fallback_translation(text)
         return {
             "text": text,
             "type": "word",
-            "translation": fallback or "",
+            "translation": "",
             "root": text,
             "pos": "unknown",
             "sentence": sentence,
             "example": "",
             "example_translation": "",
             "zipf": zipf,
-            "error": "Failed to parse response" if not fallback else None
+            "error": "Failed to parse response"
         }
     except Exception as e:
-        # On API failure, return with fallback translation if available
-        fallback = get_fallback_translation(text)
-        if fallback:
-            return {
-                "text": text,
-                "type": "word",
-                "translation": fallback,
-                "root": text,
-                "pos": "unknown",
-                "sentence": sentence,
-                "example": "",
-                "example_translation": "",
-                "zipf": zipf
-            }
         return {"error": str(e)}

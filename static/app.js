@@ -442,7 +442,14 @@ async function loadTranslation(word, zipf) {
         elements.translationText.textContent = translation;
     } catch (error) {
         elements.translationLoading.classList.add('hidden');
-        elements.translationText.textContent = 'Failed to load translation';
+        const msg = error.message || '';
+        if (msg.includes('quota') || msg.includes('429')) {
+            elements.translationText.textContent = 'API quota exhausted - wait or upgrade key';
+        } else if (msg.includes('API key')) {
+            elements.translationText.textContent = 'Set API key in settings';
+        } else {
+            elements.translationText.textContent = 'Translation unavailable';
+        }
         console.error('Translation error:', error);
     }
 }
