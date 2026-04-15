@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent"
 
 # Server-side persistent cache
 CACHE_DIR = Path(__file__).parent / ".cache"
