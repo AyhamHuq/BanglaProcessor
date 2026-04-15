@@ -7,7 +7,7 @@ from typing import Optional
 import os
 
 from tokenizer import tokenize_article
-from enricher import translate_word, enrich_word
+from enricher import translate_word, translate_batch, enrich_word
 from anki_export import create_deck, push_to_anki_connect
 
 app = FastAPI(title="Bangla Reading Assistant")
@@ -27,6 +27,11 @@ class ProcessArticleRequest(BaseModel):
 
 class TranslateRequest(BaseModel):
     text: str
+    api_key: str
+
+
+class TranslateBatchRequest(BaseModel):
+    words: list[str]
     api_key: str
 
 
@@ -84,6 +89,21 @@ async def translate(req: TranslateRequest):
         raise HTTPException(status_code=500, detail=result["error"])
 
     return {"translation": result}
+
+
+@app.post("/api/translate-batch")
+async def translate_batch_endpoint(req: TranslateBatchRequest):
+    if not req.words:
+        raise HTTPException(status_code=400, detail="Words list is required")
+    if not req.api_key:
+        raise HTTPException(status_code=400, detail="API key is required")
+
+    result = translate_batch(req.words, req.api_key)
+
+    if isinstance(result, dict) and "error" in result and len(result) == 1:
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    return {"translations": result}
 
 
 @app.post("/api/enrich")

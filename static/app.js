@@ -227,6 +227,31 @@ async function translateWord(word) {
     return data.translation;
 }
 
+async function batchTranslateWords(words) {
+    const apiKey = getApiKey();
+    if (!apiKey) return;
+
+    // Filter out already cached words
+    const cache = getTranslationCache();
+    const uncached = words.filter(w => !cache[w]);
+    if (uncached.length === 0) return;
+
+    try {
+        const response = await apiRequest('/api/translate-batch', {
+            method: 'POST',
+            body: JSON.stringify({ words: uncached, api_key: apiKey })
+        });
+        const data = await response.json();
+
+        // Cache all results
+        for (const [word, translation] of Object.entries(data.translations)) {
+            cacheTranslation(word, translation);
+        }
+    } catch (error) {
+        console.error('Batch translation error:', error);
+    }
+}
+
 async function enrichWord(word, sentence = '', zipf = 0) {
     // Check cache first
     const cache = getEnrichmentCache();
@@ -530,6 +555,15 @@ elements.readBtn.addEventListener('click', async () => {
         const result = await processArticle(text);
         renderArticle(result.html);
         showView('reader');
+
+        // Batch-translate all rare words in the background
+        const rareWords = result.tokens
+            .filter(t => t.is_rare)
+            .map(t => t.word)
+            .filter((w, i, arr) => arr.indexOf(w) === i);  // dedupe
+        if (rareWords.length > 0) {
+            batchTranslateWords(rareWords);  // fire and forget
+        }
     } catch (error) {
         showToast(error.message || 'Failed to process article', 'error');
         console.error('Process error:', error);
@@ -550,32 +584,31 @@ elements.backBtn.addEventListener('click', () => {
     hidePopup();
 });
 
-// Word click handler
-elements.articleContent.addEventListener('click', (e) => {
-    const span = e.target.closest('.word-span');
-    if (span) {
-        const word = span.dataset.word;
-        const zipf = span.dataset.zipf ? parseFloat(span.dataset.zipf) : null;
-        const rect = span.getBoundingClientRect();
-        showPopup(rect.left, rect.bottom, word, zipf);
-    }
-});
+// Word click + phrase selection handler
+elements.articleContent.addEventListener('mouseup', (e) => {
+    // Small delay to let selection finalize
+    setTimeout(() => {
+        if (elements.wordPopup.contains(e.target)) return;
 
-// Text selection handler
-document.addEventListener('mouseup', (e) => {
-    // Only handle in reader view and not on popup
-    if (elements.readerView.classList.contains('hidden')) return;
-    if (elements.wordPopup.contains(e.target)) return;
+        const selection = window.getSelection();
+        const selectedText = selection.toString().trim();
 
-    const selection = window.getSelection();
-    const selectedText = selection.toString().trim();
-
-    if (selectedText && selectedText.length > 0 && !selectedText.includes(' ')) {
-        // Single word selected via text selection
-        const range = selection.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
-        showPopup(rect.left, rect.bottom, selectedText, null);
-    }
+        if (selectedText && selectedText.length > 1) {
+            // Text was dragged/selected — treat as phrase or single word
+            const range = selection.getRangeAt(0);
+            const rect = range.getBoundingClientRect();
+            showPopup(rect.left, rect.bottom, selectedText, null);
+        } else {
+            // Single click on a word span
+            const span = e.target.closest('.word-span');
+            if (span) {
+                const word = span.dataset.word;
+                const zipf = span.dataset.zipf ? parseFloat(span.dataset.zipf) : null;
+                const rect = span.getBoundingClientRect();
+                showPopup(rect.left, rect.bottom, word, zipf);
+            }
+        }
+    }, 10);
 });
 
 // Popup close

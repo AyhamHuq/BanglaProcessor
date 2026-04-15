@@ -62,6 +62,52 @@ def _call_gemini(prompt: str, api_key: str, max_retries: int = 3) -> str:
     raise Exception("Max retries exceeded")
 
 
+def translate_batch(words: list[str], api_key: str = None) -> dict:
+    """Translate multiple words in a single API call. Returns {word: translation}."""
+    if not api_key:
+        api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return {"error": "No API key provided"}
+
+    cache = _load_cache(TRANSLATION_CACHE_FILE)
+    results = {}
+    uncached = []
+
+    for word in words:
+        cache_key = _get_cache_key(word)
+        if cache_key in cache:
+            results[word] = cache[cache_key]
+        else:
+            uncached.append(word)
+
+    if not uncached:
+        return results
+
+    # Batch up to 30 words per API call
+    for i in range(0, len(uncached), 30):
+        batch = uncached[i:i+30]
+        word_list = "\n".join(f"{j+1}. {w}" for j, w in enumerate(batch))
+        prompt = f"Translate each Bangla word to concise English (1-3 words). Reply with ONLY numbered translations, one per line.\n{word_list}"
+
+        try:
+            result = _call_gemini(prompt, api_key)
+            lines = [l.strip() for l in result.strip().split("\n") if l.strip()]
+
+            for j, word in enumerate(batch):
+                if j < len(lines):
+                    translation = lines[j].lstrip("0123456789.-) ").strip()
+                    results[word] = translation
+                    cache[_get_cache_key(word)] = translation
+                else:
+                    results[word] = ""
+        except Exception as e:
+            for word in batch:
+                results[word] = ""
+
+    _save_cache(TRANSLATION_CACHE_FILE, cache)
+    return results
+
+
 def translate_word(text: str, api_key: str = None) -> str:
     if not api_key:
         api_key = os.getenv("GEMINI_API_KEY")
