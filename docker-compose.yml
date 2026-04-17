@@ -1,0 +1,18 @@
+services:
+  bangla:
+    build: .
+    container_name: bangla
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - bangla_cache:/app/.cache
+    networks:
+      - web
+
+networks:
+  web:
+    external: true
+
+volumes:
+  bangla_cache:

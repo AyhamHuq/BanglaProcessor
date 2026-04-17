@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import Response
@@ -11,6 +12,20 @@ from enricher import translate_word, translate_batch, enrich_word
 from anki_export import create_deck, push_to_anki_connect
 
 app = FastAPI(title="Bangla Reading Assistant")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://bangla.ayhamhuq.com"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
 
 static_path = os.path.join(os.path.dirname(__file__), "static")
 templates_path = os.path.join(os.path.dirname(__file__), "templates")

@@ -1,0 +1,25 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy to Hetzner
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd /opt/bangla
+            git fetch origin main
+            git reset --hard origin/main
+            docker network inspect web >/dev/null 2>&1 || { echo "ERROR: web network not found. Deploy Portfolio first."; exit 1; }
+            docker compose up -d --build --remove-orphans
+            docker image prune -f
